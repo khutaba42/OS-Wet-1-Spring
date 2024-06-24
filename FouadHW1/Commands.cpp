@@ -915,6 +915,43 @@ void ChmodCommand::execute() {
 }
 //----------------------------------------------------------------------//
 
+
+
+
+//---------------------------------UNALIAS----------------------------------//
+
+unaliasCommand::unaliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+void unaliasCommand::execute()
+{
+    char **args= new char* [COMMAND_ARGS_MAX_LENGTH]{0};
+    int n = _parseCommandLine(command, args);
+    
+    // just the command name
+    if (n <= 1) {
+        perror("smash error: unalias: not enough argumets");
+    }
+    else
+    {
+        for (int i = 1; i <= n-1; i++)
+        {
+            std::map<std::string, std::string>::iterator it =  SmallShell::getInstance().aliases.find(std::string(args[i]));
+            if (it == std::map<std::string, std::string>::end()) 
+            {
+                perror("smash error: unalias: %s alias does not exist", args[i]);
+                break;
+            }
+            else // alias exists
+            {
+                SmallShell::getInstance().aliases.erase(it);
+            }
+        }
+        
+    }
+}
+
+//----------------------------------------------------------------------//
+
 /////////////////////////////////
 
 /**
@@ -933,12 +970,16 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
 
   string cmd_s = _trim(string(cmd));
-  string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
 
   delete[] cmd;
+  string original;
 
-    //printJobsVector();
+  if(aliases.find(cmd_s) != aliases.end()){
+    cmd_line = aliases[cmd_s].c_str();
+  }
+  string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
       return new PipeCommand(cmd_line);  //still
@@ -999,4 +1040,38 @@ void SmallShell::executeCommand(const char *cmd_line) {
       delete command;
   }
   //delete[] temp;
+}
+
+
+aliasCommand::aliasCommand(const char* cmd_line){
+    cmd = cmd_line;
+}
+
+void aliasCommand::execute() override{
+    SmallShell& shell = SmallShell::getInstance();
+    char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
+    int len = _parseCommandLine(command, args);
+
+    if(len == 1){ //should print all aliases
+        for(const auto& pair : shell.aliases){
+            cout<<pair.first<<"="<<"'"<<pair.second<<"'"<<endl;
+        }
+        return;
+    }
+    string str = string(cmd);
+    //TODO: chech if valid
+
+    string alias, original;
+    size_t index = str.find_first_of("=");
+
+    alias = str.substr(index);
+    index+=2;
+    original = str.substr(index, str.size()-index-1);
+
+    if(shell.aliases.find(alias) != shell.aliases.end()){
+        shell.aliases[alias] = original;
+    }else{
+        perror("smash error: alias: %s already exists or is a reserved command", alias);
+    }
+
 }

@@ -3,7 +3,8 @@
 
 #include <vector>
 #include <iostream>
-#include <string.h>
+#include <string>
+#include <map>
 
 
 
@@ -208,6 +209,17 @@ class ChmodCommand : public BuiltInCommand {
 };
 
 
+class WatchCommand : public Command {
+    // TODO: Add your data members
+public:
+    WatchCommand(const char *cmd_line);
+
+    virtual ~WatchCommand() {}
+
+    void execute() override;
+};
+
+
 class SmallShell {
  private:
   // TODO: Add your data members
@@ -225,6 +237,7 @@ class SmallShell {
     pid_t smashPID;
     pid_t current_PID;
     int current_jobID;
+    std::map<std::string, std::string> aliases;
     Command *CreateCommand(const char* cmd_line);
   SmallShell(SmallShell const&)      = delete; // disable copy ctor
   void operator=(SmallShell const&)  = delete; // disable = operator
@@ -253,6 +266,44 @@ class SmallShell {
   ~SmallShell();
   void executeCommand(const char* cmd_line);
   // TODO: add extra methods as needed
+};
+
+class ListDirCommand : public BuiltInCommand {
+public:
+    ListDirCommand(const char *cmd_line);
+
+    virtual ~ListDirCommand() {}
+
+    void execute() override;
+};
+
+class GetUserCommand : public BuiltInCommand {
+public:
+    GetUserCommand(const char *cmd_line);
+
+    virtual ~GetUserCommand() {}
+
+    void execute() override;
+};
+
+class aliasCommand : public BuiltInCommand {
+  private:
+  const char* cmd;
+public:
+    aliasCommand(const char *cmd_line);
+
+    virtual ~aliasCommand() {}
+
+    void execute() override;
+};
+
+class unaliasCommand : public BuiltInCommand {
+public:
+    unaliasCommand(const char *cmd_line);
+
+    virtual ~unaliasCommand() {}
+
+    void execute() override;
 };
 
 #endif //SMASH_COMMAND_H_
