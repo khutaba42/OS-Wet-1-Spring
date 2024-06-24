@@ -6,10 +6,5 @@
 using namespace std;
 
 void ctrlCHandler(int sig_num) {
-  // TODO: Add your implementation
+    // TODO: Add your implementation
 }
-
-void alarmHandler(int sig_num) {
-  // TODO: Add your implementation
-}
-
