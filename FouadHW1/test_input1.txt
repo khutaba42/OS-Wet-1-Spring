@@ -7,3 +7,5 @@ chprompt
 sleep 10&
 sleep 12
 quit kill
+alias ahmad='  echo    "hi"'
+ahmad

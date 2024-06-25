@@ -287,8 +287,6 @@ public:
 };
 
 class aliasCommand : public BuiltInCommand {
-  private:
-  const char* cmd;
 public:
     aliasCommand(const char *cmd_line);
 

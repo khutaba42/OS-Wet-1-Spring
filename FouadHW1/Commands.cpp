@@ -938,9 +938,11 @@ void unaliasCommand::execute()
         for (int i = 1; i <= n-1; i++)
         {
             std::map<std::string, std::string>::iterator it =  SmallShell::getInstance().aliases.find(std::string(args[i]));
-            if (it == std::map<std::string, std::string>::end()) 
+            if (it == SmallShell::getInstance().aliases.end())
             {
-                perror("smash error: unalias: %s alias does not exist", args[i]);
+                fprintf(stderr, "smash error: unalias: %s alias does not exist", args[i]);
+//                perror("smash error: unalias: %s alias does not exist", args[i]);
+
                 break;
             }
             else // alias exists
@@ -980,7 +982,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   if(aliases.find(cmd_s) != aliases.end()){
     cmd_line = aliases[cmd_s].c_str();
   }
-  string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+  string firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
 
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
@@ -988,6 +990,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   }
   if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
       return new RedirectionCommand(cmd_line);
+  }
+  if(firstWord == "alias"){
+      return new aliasCommand(cmd_line);
   }
   else if(firstWord == "chprompt" ){
       return new Chprompt(cmd_line);  //DONE
@@ -1045,11 +1050,10 @@ void SmallShell::executeCommand(const char *cmd_line) {
 }
 
 
-aliasCommand::aliasCommand(const char* cmd_line){
-    cmd = cmd_line;
+aliasCommand::aliasCommand(const char* cmd_line) : BuiltInCommand(cmd_line){
 }
 
-void aliasCommand::execute() override{
+void aliasCommand::execute(){
     SmallShell& shell = SmallShell::getInstance();
     char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
     int len = _parseCommandLine(command, args);
@@ -1060,11 +1064,11 @@ void aliasCommand::execute() override{
         }
         return;
     }
-    string str = string(cmd);
+    string str = string(command);
     string alias, original;
-    size_t index = str.find_first_of("=");
+    size_t index = string(argv[1]).find_first_of("=");
 
-    alias = str.substr(index);
+    alias = string(argv[1]).substr(index);
     index+=2;
     original = str.substr(index, str.size()-index-1);
 
@@ -1078,7 +1082,7 @@ void aliasCommand::execute() override{
     if(shell.aliases.find(alias) == shell.aliases.end()){
         shell.aliases[alias] = original;
     }else{
-        perror("smash error: alias: %s already exists or is a reserved command", alias);
+        fprintf(stderr, "smash error: alias: %s already exists or is a reserved command", alias.c_str());
     }
 
 }
