@@ -8,6 +8,8 @@
 #include <iomanip>
 #include "Commands.h"
 
+#include <regex>
+
 
 #include <algorithm>
 #include <fstream>
@@ -1059,8 +1061,6 @@ void aliasCommand::execute() override{
         return;
     }
     string str = string(cmd);
-    //TODO: chech if valid
-
     string alias, original;
     size_t index = str.find_first_of("=");
 
@@ -1068,7 +1068,14 @@ void aliasCommand::execute() override{
     index+=2;
     original = str.substr(index, str.size()-index-1);
 
-    if(shell.aliases.find(alias) != shell.aliases.end()){
+    const regex pattern("^alias [a-zA-Z0-9_]+='[^']*'$");
+    if(!regex_match(str, pattern)){
+        perror("smash error: alias: invalid alias format");
+        return;
+    }
+
+
+    if(shell.aliases.find(alias) == shell.aliases.end()){
         shell.aliases[alias] = original;
     }else{
         perror("smash error: alias: %s already exists or is a reserved command", alias);
