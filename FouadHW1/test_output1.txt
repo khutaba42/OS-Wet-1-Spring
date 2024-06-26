@@ -1,2 +1,1 @@
-smash> smash> CREATE COMMANDsleep 3
-smash> 
+smash> smash> smash> 

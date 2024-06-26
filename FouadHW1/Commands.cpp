@@ -7,7 +7,8 @@
 #include <sys/stat.h>
 #include <iomanip>
 #include "Commands.h"
-
+#include <pwd.h>
+#include <grp.h>
 #include <regex>
 
 
@@ -942,7 +943,7 @@ void unaliasCommand::execute()
     
     // just the command name
     if (n <= 1) {
-        perror("smash error: unalias: not enough argumets");
+        perror("smash error: unalias: not enough arguments");
     }
     else
     {
@@ -951,9 +952,7 @@ void unaliasCommand::execute()
             std::map<std::string, std::string>::iterator it =  SmallShell::getInstance().aliases.find(std::string(args[i]));
             if (it == SmallShell::getInstance().aliases.end())
             {
-                fprintf(stderr, "smash error: unalias: %s alias does not exist", args[i]);
-//                perror("smash error: unalias: %s alias does not exist", args[i]);
-
+                fprintf(stderr, "smash error: unalias: %s alias does not exist\n", args[i]);
                 break;
             }
             else // alias exists
@@ -1036,6 +1035,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   else if(firstWord == "chmod"){
       return new ChmodCommand(cmd_line);  //DONE
   }
+  else if(firstWord == "getuser"){
+      return new GetUserCommand(cmd_line);
+  }
   else{
       return new ExternalCommand(cmd_line); //DONE
   }
@@ -1064,6 +1066,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
   //delete[] temp;
 }
 
+//---------------------------------ALIAS----------------------------------//
 
 aliasCommand::aliasCommand(const char* cmd_line) : BuiltInCommand(cmd_line){
 }
@@ -1098,3 +1101,98 @@ void aliasCommand::execute(){
     }
     shell.aliases[alias] = original;
 }
+//--------------------------------------------------------------------------//
+
+
+//---------------------------------GETUSER----------------------------------//
+GetUserCommand::GetUserCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+
+string getUsernameFromUID(uid_t uid) {
+    struct passwd *pw = getpwuid(uid);
+    if (pw) {
+        return string(pw->pw_name);
+    }
+    return "";
+}
+
+string getUsernameOfProcess(char* number) {
+    pid_t pid = stoi(number);
+    string statusPath = "/proc/" + to_string(pid) + "/status";
+    ifstream statusFile(statusPath);
+    if (!statusFile.is_open()) {
+        fprintf(stderr, "smash error: getuser: process %s does not exist\n", number);
+        return "";
+    }
+
+    string line;
+    while (getline(statusFile, line)) {
+        if (line.substr(0, 5) == "Uid:\t") {
+            istringstream ss(line.substr(5));
+            uid_t uid;
+            ss >> uid;
+            return getUsernameFromUID(uid);
+        }
+    }
+    return "";
+}
+
+string getGroupnameFromGID(gid_t gid) {
+    struct group *gr = getgrgid(gid);
+    if (gr) {
+        return string(gr->gr_name);
+    }
+    return "";
+}
+
+string getGroupnameOfProcess(char* number) {
+    pid_t pid = stoi(number);
+    string statusPath = "/proc/" + to_string(pid) + "/status";
+    ifstream statusFile(statusPath);
+    if (!statusFile.is_open()) {
+        fprintf(stderr, "smash error: getuser: process %s does not exist\n", number);
+        return "";
+    }
+
+    string line;
+    while (getline(statusFile, line)) {
+        if (line.substr(0, 5) == "Gid:\t") {
+            istringstream ss(line.substr(5));
+            gid_t gid;
+            ss >> gid;
+            return getGroupnameFromGID(gid);
+        }
+    }
+    return "";
+}
+
+
+void GetUserCommand::execute() {
+    char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
+    int len = _parseCommandLine(command, args);
+
+    if(len > 2){
+        perror("smash error: getuser: too many arguments\n");
+        return;
+    }
+
+    if(!isNumber(args[1])){
+        fprintf(stderr, "smash error: getuser: process %s does not exist\n", args[1]);
+        return;
+    }
+
+   char* userPID = args[1];
+    string username = getUsernameOfProcess(userPID);
+    string groupname;
+    if(!username.empty()){
+        groupname = getGroupnameOfProcess(userPID);
+    }
+
+    if(!groupname.empty()){
+        cout<<"User: "<<username<<endl;
+        cout<<"Group: "<<groupname<<endl;
+    }
+
+}
+//--------------------------------------------------------------------------//
+
