@@ -128,6 +128,17 @@ bool ChmodFormat(char* mode/*, char* path*/){
     return true;
 }
 
+bool validAlias(const string& command){
+    const regex pattern("^alias [a-zA-Z0-9_]+='[^']*'$");
+    return regex_match(command, pattern);
+}
+
+bool reservedAlias(const string& alias){
+    SmallShell& shell = SmallShell::getInstance();
+    //TODO: check if reserved word.
+    return shell.aliases.find(alias)!=shell.aliases.end();
+}
+
 // TODO: Add your implementation for classes in Commands.h 
 
 SmallShell::SmallShell() {
@@ -974,19 +985,23 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
 
   string cmd_s = _trim(string(cmd));
-
+  char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
+  _parseCommandLine(cmd, args);
 
   delete[] cmd;
-  string original;
+  string firstWord;
 
-  if(aliases.find(cmd_s) != aliases.end()){
-    cmd_line = aliases[cmd_s].c_str();
+  if(aliases.find(args[0]) != aliases.end()){
+    firstWord = aliases[string(args[0])];
+    cmd_s = firstWord + cmd_s.substr(string(args[0]).size());
   }
-  string firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
+  else{
+      firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
+  }
 
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
-      return new PipeCommand(cmd_line);  //still
+      return new PipeCommand(cmd_line);
   }
   if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
       return new RedirectionCommand(cmd_line);
@@ -1064,25 +1079,22 @@ void aliasCommand::execute(){
         }
         return;
     }
+
     string str = string(command);
     string alias, original;
-    size_t index = string(argv[1]).find_first_of("=");
+    size_t firstSpace = str.find_first_of(" ");
+    size_t firstEqual = str.find_first_of("=");
+    size_t lastApostrophe = str.find_last_of("'");
+    alias = _trim(str.substr(firstSpace, firstEqual - firstSpace));
+    original = _trim(str.substr(firstEqual+2, lastApostrophe - firstEqual - 2));
 
-    alias = string(argv[1]).substr(index);
-    index+=2;
-    original = str.substr(index, str.size()-index-1);
-
-    const regex pattern("^alias [a-zA-Z0-9_]+='[^']*'$");
-    if(!regex_match(str, pattern)){
+    if(reservedAlias(alias)){
+        fprintf(stderr, "smash error: alias: %s already exists or is a reserved command", alias.c_str());
+        return;
+    }
+    if(!validAlias(str)){
         perror("smash error: alias: invalid alias format");
         return;
     }
-
-
-    if(shell.aliases.find(alias) == shell.aliases.end()){
-        shell.aliases[alias] = original;
-    }else{
-        fprintf(stderr, "smash error: alias: %s already exists or is a reserved command", alias.c_str());
-    }
-
+    shell.aliases[alias] = original;
 }
