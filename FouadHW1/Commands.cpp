@@ -1,7 +1,7 @@
 #include <unistd.h>
-//#include <string.h>
-//#include <iostream>
-//#include <vector>
+// #include <string.h>
+// #include <iostream>
+// #include <vector>
 #include <sstream>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -11,9 +11,23 @@
 #include <grp.h>
 #include <regex>
 
-
 #include <algorithm>
 #include <fstream>
+
+#include <fcntl.h> // open
+#include <dirent.h>
+
+// for the use getdents in listdir
+#define _GNU_SOURCE
+#include <dirent.h> /* Defines DT_* constants */
+#include <err.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/syscall.h> /* Definition of SYS_* constants */
+#include <sys/types.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -491,10 +505,11 @@ void RedirectionCommand::execute() {
         //override >
         ofstream  output(output_file);
         redirectionAux(output);
-
-    } else{
-        //append   >>
-        ofstream  output(output_file, ios::app);
+    }
+    else
+    {
+        // append   >>
+        ofstream output(output_file, ios::app);
         redirectionAux(output);
     }
 }
@@ -846,9 +861,11 @@ void ChangeDirCommand::execute(){
         cerr<< "smash error: cd: too many arguments" << endl;
         delete[] args;
     }
-    else  if (num !=1)  {
-        char* buffer = new char[MAX_PATH_LENGTH];
-        if(getcwd(buffer,MAX_PATH_LENGTH) == nullptr){
+    else if (num != 1)
+    {
+        char *buffer = new char[MAX_PATH_LENGTH];
+        if (getcwd(buffer, MAX_PATH_LENGTH) == nullptr)
+        {
             perror("smash error: chdir failed");
             delete[] args;
             delete[] buffer;
@@ -938,9 +955,10 @@ unaliasCommand::unaliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line) 
 
 void unaliasCommand::execute()
 {
+    SmallShell& shell = SmallShell::getInstance();
     char **args= new char* [COMMAND_ARGS_MAX_LENGTH]{0};
     int n = _parseCommandLine(command, args);
-    
+
     // just the command name
     if (n <= 1) {
         perror("smash error: unalias: not enough arguments");
@@ -949,15 +967,15 @@ void unaliasCommand::execute()
     {
         for (int i = 1; i <= n-1; i++)
         {
-            std::map<std::string, std::string>::iterator it =  SmallShell::getInstance().aliases.find(std::string(args[i]));
-            if (it == SmallShell::getInstance().aliases.end())
+            std::map<std::string, std::string>::iterator it =  shell.aliases.find(std::string(args[i]));
+            if (it == shell.aliases.end())
             {
                 fprintf(stderr, "smash error: unalias: %s alias does not exist\n", args[i]);
                 break;
             }
             else // alias exists
             {
-                SmallShell::getInstance().aliases.erase(it);
+                shell.aliases.erase(it);
             }
         }
         
@@ -1008,9 +1026,10 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   if(firstWord == "alias"){
       return new aliasCommand(cmd_line);
   }
-  else if(firstWord == "chprompt" ){
-      return new Chprompt(cmd_line);  //DONE
-  }
+    else if (firstWord == "unalias")
+    {
+        return new unaliasCommand(cmd_line); 
+    }
   else if(firstWord == "showpid"){
       return new ShowPidCommand(cmd_line); //DONE
   }
@@ -1034,6 +1053,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   }
   else if(firstWord == "chmod"){
       return new ChmodCommand(cmd_line);  //DONE
+  }
+  else if(firstWord == "listdir"){
+      return new ListDirCommand(cmd_line);
   }
   else if(firstWord == "getuser"){
       return new GetUserCommand(cmd_line);
@@ -1064,6 +1086,128 @@ void SmallShell::executeCommand(const char *cmd_line) {
       delete command;
   }
   //delete[] temp;
+}
+
+//---------------------------------LISTDIR----------------------------------//
+
+ListDirCommand::ListDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+ListDirCommand::~ListDirCommand() {}
+
+// max sort, i have no energy to write a more complex sorting function :)
+void sort_vectors_alphabetically(vector<string> vec)
+{
+    size_t vec_size = vec.size();
+    for (size_t i = vec_size - 1; i > 0; i++) // i > 0 , cuz if we reach element 0 it is already in its place
+    {
+        size_t max = 0;
+        for (auto j = 0; j < i; ++j)
+            if (vec[j + 1] > vec[max])
+                max = j + 1;
+
+        std::swap(vec[i], vec[max]);
+    }
+}
+
+// The linux_dirent structure is declared as follows:
+struct linux_dirent
+{
+    unsigned long d_ino;
+    off_t d_off;
+    unsigned short d_reclen;
+    char d_name[];
+};
+
+// in https://piazza.com/class/lwp40o5qxt33t6/post/106 they decided to drop support for links
+// only print the files and subdirectories
+void ListDirCommand::execute()
+{
+    const size_t FILES_LIMIT = 100; // 100 files/subdirectories is the max number
+    SmallShell &shell = SmallShell::getInstance();
+    char **args = new char *[COMMAND_ARGS_MAX_LENGTH];
+    int num = _parseCommandLine(command, args);
+
+    string path; // `path` holds the path of the dir to list its contents
+    // deduce the path
+    if (num > 2) // more than 1 argument
+    {
+        perror("smash error: listdir: too many arguments");
+        return;
+    }
+
+    const size_t BUF_SIZE = 4096;
+    path = (num == 2 ? args[1] : ".");
+    int fd;
+    char d_type;
+    char buf[BUF_SIZE];
+    long nread;
+    struct linux_dirent *d;
+
+    fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd == -1)
+        perror("smash error: open failed");
+
+    vector<string> files;
+    vector<string> directories;
+    // vector<string> symlinks;
+    for (;;)
+    {
+        nread = syscall(SYS_getdents, fd, buf, BUF_SIZE);
+        if (nread == -1)
+            perror("smash error: getdents failed");
+
+        if (nread == 0)
+            break;
+
+        for (size_t bpos = 0; bpos < nread;)
+        {
+            d = (struct linux_dirent *)(buf + bpos);
+            d_type = *(buf + bpos + d->d_reclen - 1);
+
+            const string name = d->d_name;
+            if (name != "." && name != "..")
+            {
+                if (d_type == DT_REG) // regular file
+                {
+                    files.push_back(name);
+                }
+                else if (d_type == DT_DIR) // directory
+                {
+                    directories.push_back(name);
+                }
+                // else if (d_type == DT_LNK) // symlink
+                // {
+                //     symlinks.push_back(name);
+                // }
+                else
+                {
+                    // should not be tested
+                }
+            }
+
+            bpos += d->d_reclen;
+        }
+    }
+
+    sort_vectors_alphabetically(files);
+    sort_vectors_alphabetically(directories);
+    // sort_vectors_alphabetically(symlinks);
+
+    for (const string &file_name : files)
+    {
+        std::cout << "file: " << file_name << std::endl;
+    }
+
+    for (const string &dir_name : directories)
+    {
+        std::cout << "directory: " << dir_name << std::endl;
+    }
+
+    // prolly more complex than this simple print, in piazza they dropped support
+    // for (const string &link_name : symlinks) 
+    // {
+    //     std::cout << "link: " << link_name << std::endl;
+    // }
 }
 
 //---------------------------------ALIAS----------------------------------//
