@@ -18,7 +18,6 @@
 #include <dirent.h>
 
 // for the use getdents in listdir
-//#define _GNU_SOURCE
 #include <dirent.h> /* Defines DT_* constants */
 #include <err.h>
 #include <fcntl.h>
@@ -1019,33 +1018,42 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     if(*cmd_line == '\0'){
         return nullptr;
     }
-  char* cmd = new char[COMMAND_ARGS_MAX_LENGTH];
-  cmd = strcpy(cmd, cmd_line);
+
+    char* cmd = new char[COMMAND_ARGS_MAX_LENGTH];
+    cmd = strcpy(cmd, cmd_line);
     if(_isBackgroundComamnd(cmd_line)){
-      strcpy(cmd, cmd_line);
-      _removeBackgroundSign(cmd);
-  }
-
-    string cmd_s = _trim(string(cmd));
-  char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
-  int len = _parseCommandLine(cmd, args);
-
-  delete[] cmd;
-  string firstWord;
-
-  if(aliases.find(args[0]) != aliases.end()){
-    firstWord = aliases[string(args[0])];
-    if(len > 1){
-        cmd_s = firstWord + cmd_s.substr(string(args[0]).size());
-        cout<<cmd_s.c_str()<<endl;
-        cout<<cmd_line<<endl;
-    } else{
-        cmd_s = firstWord;
+        _removeBackgroundSign(cmd);
     }
-  }
-  else{
-      firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
-  }
+    string cmd_s = _trim(string(cmd));
+    char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
+    int len = _parseCommandLine(cmd, args);
+    delete[] cmd;
+
+    string firstWord;
+
+    auto it = aliases.find(args[0]);
+    if(it != aliases.end()){
+        string command = it->second;
+        char **inner_args= new char* [COMMAND_ARGS_MAX_LENGTH];
+        int inner_len = _parseCommandLine(command.c_str(), inner_args);
+        if (inner_len > 1)
+        {
+            firstWord = inner_args[0];
+            cmd_s = command;
+        }
+        else 
+        {
+            firstWord = string(inner_args[0]);
+            cmd_s = firstWord;
+            for(int i = 1; i < len; i++) {
+                cmd_s += " ";
+                cmd_s += string(args[i]);
+            }
+        }
+    }
+    else{
+        firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
+    }
 
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
@@ -1054,6 +1062,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
       return new RedirectionCommand(cmd_s.c_str());
   }
+
   if(firstWord == "alias"){
       return new aliasCommand(cmd_s.c_str());
   }
@@ -1122,14 +1131,12 @@ void SmallShell::executeCommand(const char *cmd_line) {
 
 ListDirCommand::ListDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
 
-ListDirCommand::~ListDirCommand() {}
-
 // max sort, i have no energy to write a more complex sorting function :)
-//nigga who cares about a complex sorting function
-void sort_vectors_alphabetically(vector<string> vec)
+//nigga who cares about a complex sorting function, 💀
+void sort_vectors_alphabetically(vector<string>& vec)
 {
     size_t vec_size = vec.size();
-    for (size_t i = vec_size - 1; i > 0; i++) // i > 0 , cuz if we reach element 0 it is already in its place
+    for (size_t i = vec_size - 1; i > 0; i--) // i > 0 , cuz if we reach element 0 it is already in its place
     {
         size_t max = 0;
         for (size_t j = 0; j < i; ++j)
@@ -1159,7 +1166,6 @@ void ListDirCommand::execute()
     int num = _parseCommandLine(command, args);
 
     string path; // `path` holds the path of the dir to list its contents
-    // deduce the path
     if (num > 2) // more than 1 argument
     {
         perror("smash error: listdir: too many arguments");
@@ -1167,6 +1173,7 @@ void ListDirCommand::execute()
     }
 
     const size_t BUF_SIZE = 4096;
+    // deduce the path
     path = (num == 2 ? args[1] : ".");
     int fd;
     char d_type;
@@ -1196,7 +1203,7 @@ void ListDirCommand::execute()
             d_type = *(buf + bpos + d->d_reclen - 1);
 
             const string name = d->d_name;
-            if (name != "." && name != "..")
+            if (name.size() && name[0] != '.')
             {
                 if (d_type == DT_REG) // regular file
                 {
