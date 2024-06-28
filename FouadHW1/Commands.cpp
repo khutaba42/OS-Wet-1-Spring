@@ -18,7 +18,7 @@
 #include <dirent.h>
 
 // for the use getdents in listdir
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
 #include <dirent.h> /* Defines DT_* constants */
 #include <err.h>
 #include <fcntl.h>
@@ -150,7 +150,13 @@ bool validAlias(const string& command){
 
 bool reservedAlias(const string& alias){
     SmallShell& shell = SmallShell::getInstance();
-    //TODO: check if reserved word.
+
+    if((alias == "chprompt") || (alias == "showpid") || (alias == "pwd") || (alias == "cd") || (alias == "jobs") ||
+            (alias == "fg") || (alias == "quit") || (alias == "kill") || (alias == "alias") || (alias == "unalias") ||
+            (alias == ">") || (alias == ">>") || (alias == "|") || (alias == "listdir") || (alias == "getuser") || (alias == "watch")){
+        return true;
+    }
+
     return shell.aliases.find(alias)!=shell.aliases.end();
 }
 
@@ -379,15 +385,16 @@ Command::~Command() noexcept {
 ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line) {}
 
 void ExternalCommand::execute() {
+    cout<<command<<endl;
     pid_t pid = fork();
     if(pid < 0){
         perror("smash error: fork failed");
         return;
     }
 
-    char tmp[COMMAND_ARGS_MAX_LENGTH]{0};
+    char* tmp = new char[COMMAND_ARGS_MAX_LENGTH];
     strcpy(tmp,command);
-
+    cout<<"tmp = "<<tmp<<endl;
     if(_isBackgroundComamnd(tmp)){
         _removeBackgroundSign(tmp);
     }
@@ -396,33 +403,45 @@ void ExternalCommand::execute() {
     char** argv= new char* [COMMAND_ARGS_MAX_LENGTH]{0};
     _parseCommandLine(tmp, argv);
     int status = 0;
-
+    cout<<tmp<<endl;
     if(pid == 0){ //child
         if(setpgrp() == SYS_FAIL){
             perror("smash error: setgrp failed");
+            delete[] tmp;
             delete[] argv;
             return;
         }
+        cout<<"HERE 1"<<endl;
+
         const string s = string(command);
         if(s.find('*') != string::npos || s.find('?') != string::npos) {
             char* complex_argv[] = {bashDir, flag, tmp, nullptr};
             //Complex
+            cout<<"HERE 2"<<endl;
+
             if(execv(bashDir, complex_argv) == SYS_FAIL){
                 perror("smash error: execv failed");
                 delete[] argv;
+                delete[] tmp;
                 exit(0);
             }
         } else{
             //Simple
+            cout<<"HERE 3"<<endl;
+            cout<<"hello? "<<argv[0]<<endl;
+            cout<<argv[1]<<endl;
 
             if(execvp(argv[0], argv) == SYS_FAIL){
                 perror("smash error: execvp failed");
                 delete[] argv;
+                delete[] tmp;
                 exit(0);
             }
         }
     }
     else{  //parent
+        cout<<"PARENT 1"<<endl;
+
         if(!_isBackgroundComamnd(command)) {
             SmallShell& smash = SmallShell::getInstance();
 
@@ -430,21 +449,29 @@ void ExternalCommand::execute() {
             if(waitpid(pid, &status, WUNTRACED ) == SYS_FAIL  || status==pid){
                 perror("smash error: waitpid failed");
                 delete[] argv;
+                delete[] tmp;
                 return;
             }
+            cout<<"PARENT 2"<<endl;
+
             smash.current_PID = -1;
             delete [] argv;
+            delete[] tmp;
         }
         else {
+            cout<<"PARENT 3"<<endl;
+
             if(waitpid((pid),&status,WNOHANG)!=pid) {
                 SmallShell& smash = SmallShell::getInstance();
                 smash.getJobsList()->addJob(this, pid, command, false);
                 //smash.printJobsVector();
                 delete [] argv;
+                delete[] tmp;
                 return;
             }
             else{
                 delete [] argv;
+                delete[] tmp;
                 return;
             }
         }
@@ -583,7 +610,7 @@ void ForegroundCommand::execute()  {
     else
     {
         //checking format
-        if(!isNumber(args[1])){
+        if(!isNumber(args[1]) || stoi(args[1]) < 0){
             cerr << "smash error: fg: invalid arguments" << endl;
             delete[] args;
             return;
@@ -718,7 +745,6 @@ void KillCommand::execute()  {
         cout << "signal number " << signum << " was sent to pid " << jobProcessID << endl;
     }
     else { //syscall failed
-        //TODO: error handling
         perror("smash error: kill failed");
         delete[] args;
         return;
@@ -995,22 +1021,27 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     }
   char* cmd = new char[COMMAND_ARGS_MAX_LENGTH];
   cmd = strcpy(cmd, cmd_line);
-  if(_isBackgroundComamnd(cmd_line)){
+    if(_isBackgroundComamnd(cmd_line)){
       strcpy(cmd, cmd_line);
       _removeBackgroundSign(cmd);
   }
 
-
-  string cmd_s = _trim(string(cmd));
+    string cmd_s = _trim(string(cmd));
   char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
-  _parseCommandLine(cmd, args);
+  int len = _parseCommandLine(cmd, args);
 
   delete[] cmd;
   string firstWord;
 
   if(aliases.find(args[0]) != aliases.end()){
     firstWord = aliases[string(args[0])];
-    cmd_s = firstWord + cmd_s.substr(string(args[0]).size());
+    if(len > 1){
+        cmd_s = firstWord + cmd_s.substr(string(args[0]).size());
+        cout<<cmd_s.c_str()<<endl;
+        cout<<cmd_line<<endl;
+    } else{
+        cmd_s = firstWord;
+    }
   }
   else{
       firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
@@ -1018,50 +1049,49 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
-      return new PipeCommand(cmd_line);
+      return new PipeCommand(cmd_s.c_str());
   }
   if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
-      return new RedirectionCommand(cmd_line);
+      return new RedirectionCommand(cmd_s.c_str());
   }
   if(firstWord == "alias"){
-      return new aliasCommand(cmd_line);
+      return new aliasCommand(cmd_s.c_str());
   }
-    else if (firstWord == "unalias")
-    {
-        return new unaliasCommand(cmd_line); 
-    }
+  else if (firstWord == "unalias"){
+      return new unaliasCommand(cmd_s.c_str());
+  }
   else if(firstWord == "showpid"){
-      return new ShowPidCommand(cmd_line); //DONE
+      return new ShowPidCommand(cmd_s.c_str()); //DONE
   }
   else if(firstWord == "pwd"){
-      return new GetCurrDirCommand(cmd_line); //DONE
+      return new GetCurrDirCommand(cmd_s.c_str()); //DONE
   }
   else if(firstWord == "cd"){
-      return new ChangeDirCommand(cmd_line, &lastpwd); //DONE
+      return new ChangeDirCommand(cmd_s.c_str(), &lastpwd); //DONE
   }
   else if(firstWord == "jobs"){
-      return new JobsCommand(cmd_line, jobsList);  //WAIT
+      return new JobsCommand(cmd_s.c_str(), jobsList);  //WAIT
   }
   else if(firstWord == "fg") {
-      return new ForegroundCommand(cmd_line, jobsList);  //80% DONE
+      return new ForegroundCommand(cmd_s.c_str(), jobsList);  //80% DONE
   }
   else if(firstWord == "quit"){
-      return new QuitCommand(cmd_line, jobsList); //DONE
+      return new QuitCommand(cmd_s.c_str(), jobsList); //DONE
   }
   else if(firstWord == "kill"){
-      return new KillCommand(cmd_line, jobsList);  //DONE
+      return new KillCommand(cmd_s.c_str(), jobsList);  //DONE
   }
   else if(firstWord == "chmod"){
-      return new ChmodCommand(cmd_line);  //DONE
+      return new ChmodCommand(cmd_s.c_str());  //DONE
   }
   else if(firstWord == "listdir"){
-      return new ListDirCommand(cmd_line);
+      return new ListDirCommand(cmd_s.c_str());
   }
   else if(firstWord == "getuser"){
-      return new GetUserCommand(cmd_line);
+      return new GetUserCommand(cmd_s.c_str());
   }
   else{
-      return new ExternalCommand(cmd_line); //DONE
+      return new ExternalCommand(cmd_s.c_str()); //DONE
   }
 
   return nullptr;
@@ -1095,13 +1125,14 @@ ListDirCommand::ListDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line) 
 ListDirCommand::~ListDirCommand() {}
 
 // max sort, i have no energy to write a more complex sorting function :)
+//nigga who cares about a complex sorting function
 void sort_vectors_alphabetically(vector<string> vec)
 {
     size_t vec_size = vec.size();
     for (size_t i = vec_size - 1; i > 0; i++) // i > 0 , cuz if we reach element 0 it is already in its place
     {
         size_t max = 0;
-        for (auto j = 0; j < i; ++j)
+        for (size_t j = 0; j < i; ++j)
             if (vec[j + 1] > vec[max])
                 max = j + 1;
 
@@ -1122,8 +1153,8 @@ struct linux_dirent
 // only print the files and subdirectories
 void ListDirCommand::execute()
 {
-    const size_t FILES_LIMIT = 100; // 100 files/subdirectories is the max number
-    SmallShell &shell = SmallShell::getInstance();
+    //const size_t FILES_LIMIT = 100; // 100 files/subdirectories is the max number
+    //SmallShell &shell = SmallShell::getInstance();
     char **args = new char *[COMMAND_ARGS_MAX_LENGTH];
     int num = _parseCommandLine(command, args);
 
@@ -1140,7 +1171,7 @@ void ListDirCommand::execute()
     int fd;
     char d_type;
     char buf[BUF_SIZE];
-    long nread;
+    int nread;
     struct linux_dirent *d;
 
     fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
@@ -1159,7 +1190,7 @@ void ListDirCommand::execute()
         if (nread == 0)
             break;
 
-        for (size_t bpos = 0; bpos < nread;)
+        for (int bpos = 0; bpos < nread;)
         {
             d = (struct linux_dirent *)(buf + bpos);
             d_type = *(buf + bpos + d->d_reclen - 1);
@@ -1236,11 +1267,11 @@ void aliasCommand::execute(){
     original = _trim(str.substr(firstEqual+2, lastApostrophe - firstEqual - 2));
 
     if(reservedAlias(alias)){
-        fprintf(stderr, "smash error: alias: %s already exists or is a reserved command", alias.c_str());
+        fprintf(stderr, "smash error: alias: %s already exists or is a reserved command\n", alias.c_str());
         return;
     }
     if(!validAlias(str)){
-        perror("smash error: alias: invalid alias format");
+        perror("smash error: alias: invalid alias format\n");
         return;
     }
     shell.aliases[alias] = original;

@@ -272,7 +272,7 @@ class ListDirCommand : public BuiltInCommand {
 public:
     ListDirCommand(const char *cmd_line);
 
-    virtual ~ListDirCommand() {}
+    virtual ~ListDirCommand();
 
     void execute() override;
 };
