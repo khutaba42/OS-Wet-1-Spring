@@ -18,9 +18,7 @@ class Command {
 protected:
     const char* command;
  public:
-    Command(const char *cmd_line) {
-        command = cmd_line;
-    }
+    Command(const char *cmd_line);
   Command(const Command&) = delete;
   virtual ~Command();
   virtual void execute() = 0;
@@ -238,6 +236,7 @@ class SmallShell {
     pid_t current_PID;
     int current_jobID;
     std::map<std::string, std::string> aliases;
+    std::vector<std::string> insertion_order;
     Command *CreateCommand(const char* cmd_line);
   SmallShell(SmallShell const&)      = delete; // disable copy ctor
   void operator=(SmallShell const&)  = delete; // disable = operator

@@ -159,7 +159,11 @@ bool reservedAlias(const string& alias){
     return shell.aliases.find(alias)!=shell.aliases.end();
 }
 
-// TODO: Add your implementation for classes in Commands.h 
+// TODO: Add your implementation for classes in Commands.h
+
+Command::Command(const char *cmd_line) {
+    command = cmd_line;
+}
 
 SmallShell::SmallShell() {
 // TODO: add your implementation
@@ -384,7 +388,6 @@ Command::~Command() noexcept {
 ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line) {}
 
 void ExternalCommand::execute() {
-    cout<<command<<endl;
     pid_t pid = fork();
     if(pid < 0){
         perror("smash error: fork failed");
@@ -393,7 +396,6 @@ void ExternalCommand::execute() {
 
     char* tmp = new char[COMMAND_ARGS_MAX_LENGTH];
     strcpy(tmp,command);
-    cout<<"tmp = "<<tmp<<endl;
     if(_isBackgroundComamnd(tmp)){
         _removeBackgroundSign(tmp);
     }
@@ -402,7 +404,6 @@ void ExternalCommand::execute() {
     char** argv= new char* [COMMAND_ARGS_MAX_LENGTH]{0};
     _parseCommandLine(tmp, argv);
     int status = 0;
-    cout<<tmp<<endl;
     if(pid == 0){ //child
         if(setpgrp() == SYS_FAIL){
             perror("smash error: setgrp failed");
@@ -410,13 +411,11 @@ void ExternalCommand::execute() {
             delete[] argv;
             return;
         }
-        cout<<"HERE 1"<<endl;
 
         const string s = string(command);
         if(s.find('*') != string::npos || s.find('?') != string::npos) {
             char* complex_argv[] = {bashDir, flag, tmp, nullptr};
             //Complex
-            cout<<"HERE 2"<<endl;
 
             if(execv(bashDir, complex_argv) == SYS_FAIL){
                 perror("smash error: execv failed");
@@ -426,10 +425,6 @@ void ExternalCommand::execute() {
             }
         } else{
             //Simple
-            cout<<"HERE 3"<<endl;
-            cout<<"hello? "<<argv[0]<<endl;
-            cout<<argv[1]<<endl;
-
             if(execvp(argv[0], argv) == SYS_FAIL){
                 perror("smash error: execvp failed");
                 delete[] argv;
@@ -439,8 +434,6 @@ void ExternalCommand::execute() {
         }
     }
     else{  //parent
-        cout<<"PARENT 1"<<endl;
-
         if(!_isBackgroundComamnd(command)) {
             SmallShell& smash = SmallShell::getInstance();
 
@@ -451,15 +444,11 @@ void ExternalCommand::execute() {
                 delete[] tmp;
                 return;
             }
-            cout<<"PARENT 2"<<endl;
-
             smash.current_PID = -1;
             delete [] argv;
             delete[] tmp;
         }
         else {
-            cout<<"PARENT 3"<<endl;
-
             if(waitpid((pid),&status,WNOHANG)!=pid) {
                 SmallShell& smash = SmallShell::getInstance();
                 smash.getJobsList()->addJob(this, pid, command, false);
@@ -1001,6 +990,7 @@ void unaliasCommand::execute()
             else // alias exists
             {
                 shell.aliases.erase(it);
+                shell.insertion_order.erase(remove(shell.insertion_order.begin(), shell.insertion_order.end(), args[i]), shell.insertion_order.end());
             }
         }
         
@@ -1054,53 +1044,59 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     else{
         firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
     }
+    if(_isBackgroundComamnd(cmd_line)){
+        cmd_s += "&";
+    }
+
+    char* temp = new char[COMMAND_ARGS_MAX_LENGTH];
+    strcpy(temp,cmd_s.c_str());
 
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
-      return new PipeCommand(cmd_s.c_str());
+      return new PipeCommand(temp);
   }
   if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
-      return new RedirectionCommand(cmd_s.c_str());
+      return new RedirectionCommand(temp);
   }
 
   if(firstWord == "alias"){
-      return new aliasCommand(cmd_s.c_str());
+      return new aliasCommand(temp);
   }
   else if (firstWord == "unalias"){
-      return new unaliasCommand(cmd_s.c_str());
+      return new unaliasCommand(temp);
   }
   else if(firstWord == "showpid"){
-      return new ShowPidCommand(cmd_s.c_str()); //DONE
+      return new ShowPidCommand(temp); //DONE
   }
   else if(firstWord == "pwd"){
-      return new GetCurrDirCommand(cmd_s.c_str()); //DONE
+      return new GetCurrDirCommand(temp); //DONE
   }
   else if(firstWord == "cd"){
-      return new ChangeDirCommand(cmd_s.c_str(), &lastpwd); //DONE
+      return new ChangeDirCommand(temp, &lastpwd); //DONE
   }
   else if(firstWord == "jobs"){
-      return new JobsCommand(cmd_s.c_str(), jobsList);  //WAIT
+      return new JobsCommand(temp, jobsList);  //WAIT
   }
   else if(firstWord == "fg") {
-      return new ForegroundCommand(cmd_s.c_str(), jobsList);  //80% DONE
+      return new ForegroundCommand(temp, jobsList);  //80% DONE
   }
   else if(firstWord == "quit"){
-      return new QuitCommand(cmd_s.c_str(), jobsList); //DONE
+      return new QuitCommand(temp, jobsList); //DONE
   }
   else if(firstWord == "kill"){
-      return new KillCommand(cmd_s.c_str(), jobsList);  //DONE
+      return new KillCommand(temp, jobsList);  //DONE
   }
   else if(firstWord == "chmod"){
-      return new ChmodCommand(cmd_s.c_str());  //DONE
+      return new ChmodCommand(temp);  //DONE
   }
   else if(firstWord == "listdir"){
-      return new ListDirCommand(cmd_s.c_str());
+      return new ListDirCommand(temp);
   }
   else if(firstWord == "getuser"){
-      return new GetUserCommand(cmd_s.c_str());
+      return new GetUserCommand(temp);
   }
   else{
-      return new ExternalCommand(cmd_s.c_str()); //DONE
+      return new ExternalCommand(temp); //DONE
   }
 
   return nullptr;
@@ -1259,19 +1255,19 @@ void aliasCommand::execute(){
     int len = _parseCommandLine(command, args);
 
     if(len == 1){ //should print all aliases
-        for(const auto& pair : shell.aliases){
-            cout<<pair.first<<"="<<"'"<<pair.second<<"'"<<endl;
+        for(const auto& alias : shell.insertion_order){
+            cout<<alias<<"="<<"'"<<shell.aliases[alias]<<"'"<<endl;
         }
         return;
     }
 
     string str = string(command);
     string alias, original;
-    size_t firstSpace = str.find_first_of(" ");
+    size_t firstLetter = (str.substr(5)).find_first_not_of(" ") + 5;
     size_t firstEqual = str.find_first_of("=");
     size_t lastApostrophe = str.find_last_of("'");
-    alias = _trim(str.substr(firstSpace, firstEqual - firstSpace));
-    original = _trim(str.substr(firstEqual+2, lastApostrophe - firstEqual - 2));
+    alias = _trim(str.substr(firstLetter, firstEqual - firstLetter));
+    original = str.substr(firstEqual+2, lastApostrophe - firstEqual - 2);
 
     if(reservedAlias(alias)){
         fprintf(stderr, "smash error: alias: %s already exists or is a reserved command\n", alias.c_str());
@@ -1282,6 +1278,7 @@ void aliasCommand::execute(){
         return;
     }
     shell.aliases[alias] = original;
+    shell.insertion_order.push_back(alias);
 }
 //--------------------------------------------------------------------------//
 
