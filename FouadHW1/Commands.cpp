@@ -406,7 +406,7 @@ void ExternalCommand::execute() {
     int status = 0;
     if(pid == 0){ //child
         if(setpgrp() == SYS_FAIL){
-            perror("smash error: setgrp failed");
+            perror("smash error: setpgrp failed");
             delete[] tmp;
             delete[] argv;
             return;
@@ -975,7 +975,7 @@ void unaliasCommand::execute()
 
     // just the command name
     if (n <= 1) {
-        perror("smash error: unalias: not enough arguments");
+        cerr << "smash error: unalias: not enough arguments" << endl;
     }
     else
     {
@@ -984,7 +984,7 @@ void unaliasCommand::execute()
             std::map<std::string, std::string>::iterator it =  shell.aliases.find(std::string(args[i]));
             if (it == shell.aliases.end())
             {
-                fprintf(stderr, "smash error: unalias: %s alias does not exist\n", args[i]);
+                cerr << "smash error: unalias: " << args[i] <<  " alias does not exist\n" << endl;
                 break;
             }
             else // alias exists
@@ -1167,10 +1167,12 @@ void ListDirCommand::execute()
     string path; // `path` holds the path of the dir to list its contents
     if (num > 2) // more than 1 argument
     {
-        perror("smash error: listdir: too many arguments");
+        cerr << "smash error: listdir: too many arguments" << endl;
         return;
     }
 
+
+    // i got this from an example in https://man7.org/linux/man-pages/man2/getdents.2.html
     const size_t BUF_SIZE = 4096;
     // deduce the path
     path = (num == 2 ? args[1] : ".");
@@ -1181,8 +1183,10 @@ void ListDirCommand::execute()
     struct linux_dirent *d;
 
     fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
-    if (fd == -1)
+    if (fd == -1){
         perror("smash error: open failed");
+        return;
+    }
 
     vector<string> files;
     vector<string> directories;
@@ -1190,8 +1194,11 @@ void ListDirCommand::execute()
     for (;;)
     {
         nread = syscall(SYS_getdents, fd, buf, BUF_SIZE);
-        if (nread == -1)
+        if (nread == -1){
+            close(fd);
             perror("smash error: getdents failed");
+            return;
+        }
 
         if (nread == 0)
             break;
@@ -1225,6 +1232,7 @@ void ListDirCommand::execute()
             bpos += d->d_reclen;
         }
     }
+    close(fd);
 
     sort_vectors_alphabetically(files);
     sort_vectors_alphabetically(directories);
@@ -1273,11 +1281,11 @@ void aliasCommand::execute(){
     original = str.substr(firstEqual+2, lastApostrophe - firstEqual - 2);
 
     if(reservedAlias(alias)){
-        fprintf(stderr, "smash error: alias: %s already exists or is a reserved command\n", alias.c_str());
+        cerr << "smash error: alias: "<< alias <<" already exists or is a reserved command" << endl;
         return;
     }
     if(!validAlias(str)){
-        perror("smash error: alias: invalid alias format\n");
+        cerr << "smash error: alias: invalid alias format" << endl;
         return;
     }
     shell.aliases[alias] = original;
@@ -1303,7 +1311,7 @@ string getUsernameOfProcess(char* number) {
     string statusPath = "/proc/" + to_string(pid) + "/status";
     ifstream statusFile(statusPath);
     if (!statusFile.is_open()) {
-        fprintf(stderr, "smash error: getuser: process %s does not exist\n", number);
+        cerr << "smash error: getuser: process " << number << " does not exist" << endl;
         return "";
     }
 
@@ -1332,7 +1340,7 @@ string getGroupnameOfProcess(char* number) {
     string statusPath = "/proc/" + to_string(pid) + "/status";
     ifstream statusFile(statusPath);
     if (!statusFile.is_open()) {
-        fprintf(stderr, "smash error: getuser: process %s does not exist\n", number);
+        cerr << "smash error: getuser: process "<< number <<" does not exist" << endl;
         return "";
     }
 
@@ -1354,12 +1362,12 @@ void GetUserCommand::execute() {
     int len = _parseCommandLine(command, args);
 
     if(len > 2){
-        perror("smash error: getuser: too many arguments\n");
+        cerr << "smash error: getuser: too many arguments" << endl;
         return;
     }
 
     if(!isNumber(args[1])){
-        fprintf(stderr, "smash error: getuser: process %s does not exist\n", args[1]);
+        cerr << "smash error: getuser: process " << args[1] << " does not exist" << endl;
         return;
     }
 
