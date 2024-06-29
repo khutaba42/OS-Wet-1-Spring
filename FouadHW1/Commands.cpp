@@ -1065,6 +1065,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   else if (firstWord == "unalias"){
       return new unaliasCommand(temp);
   }
+  else if(firstWord == "chprompt"){
+      return new Chprompt(temp);
+  }
   else if(firstWord == "showpid"){
       return new ShowPidCommand(temp); //DONE
   }
