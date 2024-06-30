@@ -1011,18 +1011,21 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
     char* cmd = new char[COMMAND_ARGS_MAX_LENGTH];
     cmd = strcpy(cmd, cmd_line);
+    string rest;
     if(_isBackgroundComamnd(cmd_line)){
+        size_t index = ((string)cmd).find_last_not_of(" ")-1;
         _removeBackgroundSign(cmd);
+        rest = (((string)cmd)[index] == ' ') ? ((string)cmd).substr(((string)cmd).find_last_not_of(" ")+1) : "";
     }
     string cmd_s = _trim(string(cmd));
     char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
     int len = _parseCommandLine(cmd, args);
-    delete[] cmd;
 
     string firstWord;
-
+    string alias_command;
     auto it = aliases.find(args[0]);
     if(it != aliases.end()){
+        alias_command = it->first;
         string command = it->second;
         char **inner_args= new char* [COMMAND_ARGS_MAX_LENGTH];
         int inner_len = _parseCommandLine(command.c_str(), inner_args);
@@ -1036,8 +1039,10 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
             firstWord = string(inner_args[0]);
             cmd_s = firstWord;
             for(int i = 1; i < len; i++) {
+                alias_command += " ";
                 cmd_s += " ";
                 cmd_s += string(args[i]);
+                alias_command += string(args[i]);
             }
         }
     }
@@ -1045,11 +1050,15 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
         firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
     }
     if(_isBackgroundComamnd(cmd_line)){
-        cmd_s += "&";
+        cmd_s += rest+"&";
+        alias_command += rest+"&";
     }
 
+    delete[] cmd;
     char* temp = new char[COMMAND_ARGS_MAX_LENGTH];
+    char* tempAlias = new char[COMMAND_ARGS_MAX_LENGTH];
     strcpy(temp,cmd_s.c_str());
+    strcpy(tempAlias,alias_command.c_str());
 
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
