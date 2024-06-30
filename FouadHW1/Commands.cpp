@@ -385,7 +385,7 @@ Command::~Command() noexcept {
 
 
 //----------------------------------EXTERNAL----------------------------------//
-ExternalCommand::ExternalCommand(const char *cmd_line, const char* alias) : Command(cmd_line), alias(nullptr) {}
+ExternalCommand::ExternalCommand(const char *cmd_line, const char* alias) : Command(cmd_line), alias(alias) {}
 
 void ExternalCommand::execute() {
     pid_t pid = fork();
@@ -449,14 +449,18 @@ void ExternalCommand::execute() {
             delete[] tmp;
         }
         else {
+            Command* realCommand;
+            char* origCommand = new char[COMMAND_MAX_ARGS];
             if(alias){
-                strcpy(tmp, alias);
+                strcpy(origCommand, alias);
+                realCommand = new ExternalCommand(tmp, nullptr);
             } else{
-                strcpy(tmp, command);
+                strcpy(origCommand, command);
+                realCommand = this;
             }
             if(waitpid((pid),&status,WNOHANG)!=pid) {
                 SmallShell& smash = SmallShell::getInstance();
-                smash.getJobsList()->addJob(this, pid, tmp, false);
+                smash.getJobsList()->addJob(realCommand, pid, origCommand, false);
                 //smash.printJobsVector();
                 delete [] argv;
                 delete[] tmp;
@@ -1024,11 +1028,12 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
         size_t non_space_index = cmd_string.find_last_not_of(' ', amp_index - 1);
 
-        cmd = cmd_string.substr(0, non_space_index + 1);
+        //cmd = cmd_string.substr(0, non_space_index + 1);
 
         rest = cmd_string.substr(non_space_index + 1);
-
+        _removeBackgroundSign(cmd);
     }
+
     string cmd_s = _trim(string(cmd));
     char **args= new char* [COMMAND_ARGS_MAX_LENGTH];
     int len = _parseCommandLine(cmd, args);
@@ -1038,7 +1043,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     auto it = aliases.find(args[0]);
     if(it != aliases.end()){
         isAlias = true;
-        alias_command = it->first;
+        alias_command = args[0];
         string command = it->second;
         char **inner_args= new char* [COMMAND_ARGS_MAX_LENGTH];
         int inner_len = _parseCommandLine(command.c_str(), inner_args);
@@ -1063,8 +1068,8 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
         firstWord = string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
     }
     if(_isBackgroundComamnd(cmd_line)){
-        cmd_s += rest+"&";
-        alias_command += rest+"&";
+        cmd_s += rest;
+        alias_command += rest;
     }
 
     delete[] cmd;
@@ -1072,7 +1077,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     char* tempAlias = new char[COMMAND_ARGS_MAX_LENGTH];
     strcpy(temp,cmd_s.c_str());
     strcpy(tempAlias,alias_command.c_str());
-
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
       return new PipeCommand(temp);

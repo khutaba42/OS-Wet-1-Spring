@@ -39,7 +39,7 @@ class ExternalCommand : public Command {
   private:
   const char* alias;
  public:
-  ExternalCommand(const char* cmd_line);
+  ExternalCommand(const char* cmd_line, const char* alias);
   virtual ~ExternalCommand() {}
   void execute() override;
 };

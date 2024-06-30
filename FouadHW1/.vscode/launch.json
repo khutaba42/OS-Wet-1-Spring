@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(lldb) Debug EXEC",
+            "type": "cppdbg",
+            "request": "launch",
+            "preLaunchTask": "build EXEC", // make sure latest build is compiled before debugging
+            "program": "${workspaceFolder}/EXEC",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb"
+        },
+    ]
+}
