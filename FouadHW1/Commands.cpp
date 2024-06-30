@@ -598,7 +598,7 @@ void ForegroundCommand::execute()  {
     else
     {
         //checking format
-        if(!isNumber(args[1]) || stoi(args[1]) < 0){
+        if(!isNumber(args[1])){
             cerr << "smash error: fg: invalid arguments" << endl;
             delete[] args;
             return;
@@ -1013,9 +1013,16 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     cmd = strcpy(cmd, cmd_line);
     string rest;
     if(_isBackgroundComamnd(cmd_line)){
-        size_t index = ((string)cmd).find_last_not_of(" ")-1;
-        _removeBackgroundSign(cmd);
-        rest = (((string)cmd)[index] == ' ') ? ((string)cmd).substr(((string)cmd).find_last_not_of(" ")+1) : "";
+        string cmd_string = string(cmd);
+
+        size_t amp_index = cmd_string.find_last_of('&');
+
+        size_t non_space_index = cmd_string.find_last_not_of(' ', amp_index - 1);
+
+        cmd = cmd_string.substr(0, non_space_index + 1);
+
+        rest = cmd_string.substr(non_space_index + 1);
+
     }
     string cmd_s = _trim(string(cmd));
     char **args= new char* [COMMAND_ARGS_MAX_LENGTH];

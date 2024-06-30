@@ -5,7 +5,7 @@ smash error: fg: job-id 11 does not exist
 smash error: fg: job-id 11 does not exist
 smash error: fg: job-id 20 does not exist
 smash error: fg: job-id 21 does not exist
-smash error: fg: job-id -2 does not exist
+smash error: fg: invalid arguments
 smash error: kill: job-id 1 does not exist
 smash error: fg: job-id 4 does not exist
 smash error: fg: job-id 1 does not exist
