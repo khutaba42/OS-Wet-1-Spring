@@ -36,6 +36,8 @@ class BuiltInCommand : public Command {
 };
 
 class ExternalCommand : public Command {
+  private:
+  const char* alias;
  public:
   ExternalCommand(const char* cmd_line);
   virtual ~ExternalCommand() {}

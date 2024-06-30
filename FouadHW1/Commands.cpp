@@ -385,7 +385,7 @@ Command::~Command() noexcept {
 
 
 //----------------------------------EXTERNAL----------------------------------//
-ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line) {}
+ExternalCommand::ExternalCommand(const char *cmd_line, const char* alias) : Command(cmd_line), alias(nullptr) {}
 
 void ExternalCommand::execute() {
     pid_t pid = fork();
@@ -449,9 +449,14 @@ void ExternalCommand::execute() {
             delete[] tmp;
         }
         else {
+            if(alias){
+                strcpy(tmp, alias);
+            } else{
+                strcpy(tmp, command);
+            }
             if(waitpid((pid),&status,WNOHANG)!=pid) {
                 SmallShell& smash = SmallShell::getInstance();
-                smash.getJobsList()->addJob(this, pid, command, false);
+                smash.getJobsList()->addJob(this, pid, tmp, false);
                 //smash.printJobsVector();
                 delete [] argv;
                 delete[] tmp;
@@ -1008,7 +1013,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     if(*cmd_line == '\0'){
         return nullptr;
     }
-
+    bool isAlias = false;
     char* cmd = new char[COMMAND_ARGS_MAX_LENGTH];
     cmd = strcpy(cmd, cmd_line);
     string rest;
@@ -1032,6 +1037,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     string alias_command;
     auto it = aliases.find(args[0]);
     if(it != aliases.end()){
+        isAlias = true;
         alias_command = it->first;
         string command = it->second;
         char **inner_args= new char* [COMMAND_ARGS_MAX_LENGTH];
@@ -1115,7 +1121,10 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
       return new GetUserCommand(temp);
   }
   else{
-      return new ExternalCommand(temp); //DONE
+    if(isAlias){
+        return new ExternalCommand(temp, tempAlias); //DONE
+    }
+    return new ExternalCommand(temp, nullptr);
   }
 
   return nullptr;
